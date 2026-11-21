@@ -5,6 +5,8 @@ import os
 import shutil
 import subprocess
 
+from lab_walkthroughs import WALKTHROUGHS, AWS_BLOCKS
+
 ROOT = Path(__file__).resolve().parents[1]
 def put(name, content):
     p=ROOT/name; p.parent.mkdir(parents=True,exist_ok=True); p.write_text(content.strip()+'\n',encoding='utf-8', newline='\n')
@@ -78,6 +80,9 @@ variable "environment" {
 labdata=[]
 def lab(slug,title,minutes,goal,main,steps,check,challenge,cost='No AWS resources',prereq='Windows setup completed'):
     folder='labs/'+slug
+    walkthrough = WALKTHROUGHS[slug].strip()
+    if main.startswith(aws):
+        walkthrough = walkthrough.replace('## How the blocks work\n', '## How the blocks work\n\n' + AWS_BLOCKS.strip() + '\n', 1)
     put(folder+'/main.tf',main)
     labdata.append(dict(slug=slug,title=title,minutes=minutes,goal=goal,steps=steps,check=check,challenge=challenge,cost=cost,prereq=prereq))
     put(folder+'/README.md',f'''# {title}
@@ -85,6 +90,8 @@ def lab(slug,title,minutes,goal,main,steps,check,challenge,cost='No AWS resource
 Time: {minutes} minutes. Prerequisites: {prereq}. Cost: {cost}.
 
 {goal}
+
+{walkthrough}
 
 ## Steps
 
@@ -98,6 +105,8 @@ terraform fmt
 terraform validate
 ```
 
+`init` prepares this directory. `fmt` formats the source and `validate` checks the configuration. A successful `validate` prints `Success! The configuration is valid.`
+
 {steps}
 
 ```bash
@@ -107,6 +116,8 @@ terraform apply review.tfplan
 terraform output
 terraform plan
 ```
+
+`plan` saves the proposed actions to `review.tfplan`. `show` lets you read that exact plan before `apply` executes it. `output` reads saved root outputs, and the final `plan` checks whether any changes remain. In plan output, `+` means create, `~` means update in place, and `-` means destroy.
 
 Expected: {check}
 
@@ -198,7 +209,7 @@ output "bucket_name" {
   value = aws_s3_bucket.practice.id
 }'''
 lab('04-aws-storage','First AWS resource: private S3 bucket',45,'Configure a provider, identity guard and private storage.',aws+s3,'Run cp terraform.tfvars.example terraform.tfvars and replace the account ID and owner. Authenticate outside Terraform. Run aws sts get-caller-identity and compare the Account before plan. Do not upload objects in this first lab.','A private encrypted bucket; provider guard rejects the wrong account.','Explain provider plugin versus module and why credentials do not belong in provider blocks.','S3 requests/storage may incur charges','AWS identity configured; sandbox permissions for S3')
-lab('05-state-drift','State, drift and import',45,'Observe drift without deleting state.',aws+s3,'Create the empty bucket first. In AWS Console change its Owner tag. Run terraform plan -refresh-only, inspect it, then terraform plan and apply to restore the configured tag. Run terraform state list and terraform state show aws_s3_bucket.practice. For import practice: after normal destroy, create an EMPTY private bucket in the console, change bucket_prefix to bucket = "YOUR-EXACT-BUCKET", then terraform import aws_s3_bucket.practice YOUR-EXACT-BUCKET. Review the plan: import only adopts the bucket, companion controls still need apply. Destroy only your adopted training bucket.','Drift appears in plan. Import establishes a binding between one resource address and one remote object.','Discuss why state rm forgets a resource without deleting it; never practice it on shared infrastructure.','S3 requests/storage may incur charges','Lab 04 completed and destroyed')
+lab('05-state-drift','State, drift and import',45,'Observe drift without deleting state.',aws+s3,'Copy terraform.tfvars.example to terraform.tfvars and set account_id and owner as in Lab 04. Create the empty bucket first. In AWS Console change its Owner tag. Run terraform plan -refresh-only, inspect it, then terraform plan and apply to restore the configured tag. Run terraform state list and terraform state show aws_s3_bucket.practice. For import practice: after normal destroy, create an EMPTY private bucket in the console, change bucket_prefix to bucket = "YOUR-EXACT-BUCKET", then terraform import aws_s3_bucket.practice YOUR-EXACT-BUCKET. Review the plan: import only adopts the bucket, companion controls still need apply. Destroy only your adopted training bucket.','Drift appears in plan. Import establishes a binding between one resource address and one remote object.','Discuss why state rm forgets a resource without deleting it; never practice it on shared infrastructure.','S3 requests/storage may incur charges','Lab 04 completed and destroyed')
 network='''variable "name" {
   type = string
 }
@@ -342,7 +353,7 @@ resource "terraform_data" "configure" {
 output "public_ip" {
   value = aws_instance.demo.public_ip
 }'''
-lab('08-ssh-provisioners','File and remote-exec provisioners',60,'Copy a file from Windows to EC2 and execute a remote command.',aws+ssh,'''Create ~/.ssh with mkdir -p "$HOME/.ssh". Generate a dedicated SSH key OUTSIDE the repository: ssh-keygen -t ed25519 -f "$HOME/.ssh/terraform-training". For this short classroom demo use a dedicated unencrypted key (empty passphrase); delete it after cleanup, never reuse a personal key. After AWS destroy succeeds, remove only the dedicated key files with rm -f "$HOME/.ssh/terraform-training" "$HOME/.ssh/terraform-training.pub" and unset TF_VAR_private_key_path. Put public_key_path = "~/.ssh/terraform-training.pub" and admin_cidr = "YOUR-PUBLIC-IP/32" in terraform.tfvars with account_id and owner. Run export TF_VAR_private_key_path="$(cygpath -m "$HOME/.ssh/terraform-training")" before plan AND apply. This ephemeral input is not saved in the plan. Run terraform plan/apply with the environment still set. File runs before remote-exec. This SSH example omits host-key pinning for first-contact teaching only; verified host_key or SSM is required for hardened operations. Prefer cloud-init, immutable images and SSM in real deployments.''','Remote console prints welcome.txt; port 22 accepts only your /32.','Change welcome.txt; inspect terraform_data replacement. Contrast remote-exec with EC2 user_data.','EC2, EBS and public IPv4 billed; no free-tier assumption','AWS S3 labs completed; EC2/VPC/SSM parameter read permissions; SSH outbound allowed')
+lab('08-ssh-provisioners','File and remote-exec provisioners',60,'Copy a file from Windows to EC2 and execute a remote command.',aws+ssh,'''Create ~/.ssh with mkdir -p "$HOME/.ssh". Generate a dedicated SSH key OUTSIDE the repository: ssh-keygen -t ed25519 -f "$HOME/.ssh/terraform-training". For this short classroom demo use a dedicated unencrypted key (empty passphrase); delete it after cleanup, never reuse a personal key. After AWS destroy succeeds, remove only the dedicated key files with rm -f "$HOME/.ssh/terraform-training" "$HOME/.ssh/terraform-training.pub" and unset TF_VAR_private_key_path. Put public_key_path = "~/.ssh/terraform-training.pub" and admin_cidr = "YOUR-PUBLIC-IP/32" in terraform.tfvars with account_id and owner. Run export TF_VAR_private_key_path="$(cygpath -m "$HOME/.ssh/terraform-training")" before plan AND apply. This ephemeral input is not saved in the plan. Run terraform plan/apply with the environment still set. File runs before remote-exec. This SSH example omits host-key pinning for first-contact teaching only; verified host_key or SSM is required for hardened operations. Prefer cloud-init, immutable images and SSM in real deployments.''','The file contains the two expected lines on EC2 and the root output shows its public IP.','Change welcome.txt; inspect terraform_data replacement. Contrast remote-exec with EC2 user_data.','EC2, EBS and public IPv4 billed; no free-tier assumption','AWS S3 labs completed; EC2/VPC/SSM parameter read permissions; SSH outbound allowed')
 put('labs/03-local-exec/notice.sh', '''#!/usr/bin/env bash\nprintf '%s\\n' "$TRAINING_MESSAGE"''')
 put('labs/08-ssh-provisioners/welcome.txt','Hello from a file copied by Terraform.\nThis is an isolated training machine.')
 for d in ['04-aws-storage','05-state-drift','06-network','07-modules','08-ssh-provisioners']:
