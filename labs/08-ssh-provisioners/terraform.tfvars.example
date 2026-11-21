@@ -1,0 +1,3 @@
+account_id = "REPLACE_WITH_12_DIGITS"
+owner = "student01"
+aws_region = "ap-south-1"

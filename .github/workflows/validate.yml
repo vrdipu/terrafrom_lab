@@ -1,0 +1,25 @@
+name: Terraform source validation
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: '1.10.5'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/check_repo.py
+      - run: python scripts/check_html.py
+      - run: terraform fmt -check -recursive
+      - name: Validate every root without AWS credentials
+        shell: bash
+        run: |
+          for root in labs/* bootstrap/state environments/*; do
+            terraform -chdir="$root" init -backend=false -input=false
+            terraform -chdir="$root" validate
+          done

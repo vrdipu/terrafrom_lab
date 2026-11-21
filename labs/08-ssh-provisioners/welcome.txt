@@ -1,0 +1,2 @@
+Hello from a file copied by Terraform.
+This is an isolated training machine.
